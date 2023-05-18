@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  ApiGatewayStageName:
+    Type: String
+    Description: Stage name for the API Gateway
+Resources:
+  HelloLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: HelloLambdaRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: HelloLambdaPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: '*'
+            Resource: '*'
+  HelloLambdaPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: HelloLambdaPolicy
+      Roles:
+      - Ref: HelloLambdaRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Resource: '*'
+  HelloAPiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName:
+        Ref: ApiGatewayStageName
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title: HelloAPiGateway
+        paths:
+          /HelloWorld:
+            get:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: Success
+                  schema:
+                    type: object
+              x-amazon-apigateway-integration:
+                type: AWS
+                httpMethod: POST
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MyLambdaFunction.Arn}/invocations
+                passthroughBehavior: when_no_match
+                contentHandling: CONVERT_TO_TEXT
+                responses:
+                  default:
+                    statusCode: '200'
+                requestTemplates:
+                  application/json: "{\n  \"method\": \"$context.httpMethod\",\n \
+                    \ \"body\" : $input.json('$'),\n  \"headers\": {\n    #foreach($param\
+                    \ in $input.params().header.keySet())\n    \"$param\": \"$util.escapeJavaScript($input.params().header.get($param))\"\
+                    \n    #if($foreach.hasNext),#end\n    #end\n  }\n}\n"
+  MyLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: MyLambdaFunction
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Role:
+        Fn::GetAtt:
+        - HelloLambdaRole
+        - Arn
+      Events:
+        HelloAPiGateway:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: HelloAPiGateway
+            Path: /HelloWorld
+            Method: get
+    Metadata:
+      SamResourceId: MyLambdaFunction
+Outputs:
+  ApiGatewayInvokeURL:
+    Value:
+      Fn::Sub: https://${HelloAPiGateway}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayStageName}
