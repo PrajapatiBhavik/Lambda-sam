@@ -92,7 +92,7 @@ Resources:
     Properties:
       CodeUri: .
       Handler: app.lambda_handler
-      Runtime: python3.11
+      Runtime: python3.8
       Role: !GetAtt HelloLambdaRole.Arn
       Events:
         HelloAPiGateway:
